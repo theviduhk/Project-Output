@@ -104,5 +104,12 @@ async function updateFirebase(data) {
   });
 }
 
-// 👉 IMPORTANT: single run (NO loop)
-mainLoop();
+// 🔁 LOOP EVERY 1 SECOND (safe async loop)
+async function startLoop() {
+  while (true) {
+    await mainLoop();
+    await new Promise(r => setTimeout(r, 1000)); // 1 second delay
+  }
+}
+
+startLoop();
