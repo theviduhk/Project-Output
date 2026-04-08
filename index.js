@@ -108,7 +108,7 @@ async function updateFirebase(data) {
 async function startLoop() {
   while (true) {
     await mainLoop();
-    await new Promise(r => setTimeout(r, 1000)); // 1 second delay
+    await new Promise(r => setTimeout(r, 10 * 60 * 1000)); // 1 second delay
   }
 }
 
