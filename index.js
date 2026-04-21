@@ -3,25 +3,29 @@ import fetch from "node-fetch";
 const GRAFANA_QUERY_URL =
   "https://monitor-public.trax-cloud.com/api/datasources/proxy/133/bigquery/v2/projects/trax-ortal-prod/queries";
 
-// 👉 Only session value (NOT full cookie string)
+// ✅ session cookie value only
 const SESSION = "c8eaf4ebc900f42829a1e55664c4fb73";
 
 const FIREBASE_URL =
   "https://projectgap-4b7d9-default-rtdb.firebaseio.com/project-gap.json";
 
-// ✅ SAFE JSON PARSER
+// -----------------------------
+// 🔥 SAFE JSON PARSER
+// -----------------------------
 async function safeJson(res) {
   const text = await res.text();
 
   try {
     return JSON.parse(text);
-  } catch {
+  } catch (e) {
     console.log("❌ RAW RESPONSE:\n", text);
-    throw new Error("Non-JSON response received");
+    throw new Error("Non-JSON response (likely 403 or HTML)");
   }
 }
 
+// -----------------------------
 // 🔁 MAIN LOOP
+// -----------------------------
 async function mainLoop() {
   try {
     console.log("Fetching...");
@@ -38,7 +42,9 @@ async function mainLoop() {
   }
 }
 
+// -----------------------------
 // ▶️ RUN QUERY
+// -----------------------------
 async function runQuery() {
   const body = {
     query: `
@@ -60,18 +66,19 @@ async function runQuery() {
       "Content-Type": "application/json",
       "Accept": "application/json",
 
-      // ✅ FIXED COOKIE FORMAT
+      // ✅ IMPORTANT FIX
       "Cookie": `grafana_session=${SESSION}`,
 
-      // optional but helps Grafana setups
+      // sometimes required
       "X-Grafana-Org-Id": "1",
     },
     body: JSON.stringify(body),
   });
 
   if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`HTTP ${res.status} - ${errText}`);
+    console.log("❌ STATUS:", res.status);
+    console.log(await res.text());
+    throw new Error("Query request failed (check auth / session)");
   }
 
   const data = await safeJson(res);
@@ -82,7 +89,9 @@ async function runQuery() {
   };
 }
 
-// ▶️ GET RESULTS (polling)
+// -----------------------------
+// ▶️ POLL RESULTS
+// -----------------------------
 async function getQueryResults(job) {
   const url = `${GRAFANA_QUERY_URL}/${job.jobId}?location=${job.location}`;
 
@@ -95,8 +104,9 @@ async function getQueryResults(job) {
     });
 
     if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`Polling failed ${res.status}: ${err}`);
+      console.log("❌ POLLING STATUS:", res.status);
+      console.log(await res.text());
+      throw new Error("Polling failed (auth issue likely)");
     }
 
     const json = await safeJson(res);
@@ -106,10 +116,12 @@ async function getQueryResults(job) {
     await new Promise((r) => setTimeout(r, 1500));
   }
 
-  throw new Error("Timeout waiting for BigQuery job");
+  throw new Error("Timeout waiting for query result");
 }
 
-// ▶️ PROCESS RESULTS
+// -----------------------------
+// ▶️ PROCESS DATA
+// -----------------------------
 function processResults(result) {
   if (!result.rows) return [];
 
@@ -131,7 +143,9 @@ function processResults(result) {
   });
 }
 
-// ▶️ FIREBASE UPDATE
+// -----------------------------
+// 🔥 FIREBASE UPDATE
+// -----------------------------
 async function updateFirebase(data) {
   const res = await fetch(FIREBASE_URL, {
     method: "PUT",
@@ -150,12 +164,14 @@ async function updateFirebase(data) {
   }
 }
 
-// 🔁 LOOP RUNNER
+// -----------------------------
+// 🔁 LOOP
+// -----------------------------
 async function startLoop() {
   while (true) {
     await mainLoop();
 
-    // ⚠️ 30 seconds delay
+    // 30 sec delay
     await new Promise((r) => setTimeout(r, 30000));
   }
 }
