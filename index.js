@@ -2,8 +2,8 @@ import fetch from "node-fetch";
 
 const GRAFANA_QUERY_URL = "https://monitor-public.trax-cloud.com/api/datasources/proxy/133/bigquery/v2/projects/trax-ortal-prod/queries";
 
-const USERNAME = "gss.kurunegala@gssintl.biz";
-const PASSWORD = "Gssk@2021";
+const USERNAME = "gss.colombo@gssintl.biz";
+const PASSWORD = "GSS_TraxForm@2026";
 
 const FIREBASE_URL = "https://projectgap-4b7d9-default-rtdb.firebaseio.com/project-gap.json";
 
