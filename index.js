@@ -2,7 +2,7 @@ import fetch from "node-fetch";
 
 const GRAFANA_QUERY_URL = "https://monitor-public.trax-cloud.com/api/datasources/proxy/133/bigquery/v2/projects/trax-ortal-prod/queries";
 
-const SESSION = "grafana_session=c8eaf4ebc900f42829a1e55664c4fb73";
+const SESSION = "grafana_session=5e8ae854fade4bc96c8abbe455f10464";
 
 const FIREBASE_URL = "https://projectgap-4b7d9-default-rtdb.firebaseio.com/project-gap.json";
 
