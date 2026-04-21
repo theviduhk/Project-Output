@@ -2,16 +2,22 @@ import fetch from "node-fetch";
 
 const GRAFANA_QUERY_URL = "https://monitor-public.trax-cloud.com/api/datasources/proxy/133/bigquery/v2/projects/trax-ortal-prod/queries";
 
-const USERNAME = "gss.colombo@gssintl.biz";
-const PASSWORD = "GSS_TraxForm@2026";
+const SESSION = "grafana_session=c8eaf4ebc900f42829a1e55664c4fb73";
 
 const FIREBASE_URL = "https://projectgap-4b7d9-default-rtdb.firebaseio.com/project-gap.json";
 
-const headers = {
-  "Authorization": "Basic " + Buffer.from(`${USERNAME}:${PASSWORD}`).toString("base64"),
-  "Content-Type": "application/json"
-};
+// ✅ SAFE JSON
+async function safeJson(res) {
+  const text = await res.text();
 
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`❌ Non-JSON response:\n${text.substring(0, 200)}`);
+  }
+}
+
+// 🔁 MAIN LOOP
 async function mainLoop() {
   try {
     console.log("Fetching...");
@@ -22,13 +28,14 @@ async function mainLoop() {
 
     await updateFirebase(formatted);
 
-    console.log("Updated:", new Date().toLocaleTimeString());
+    console.log("✅ Updated:", new Date().toLocaleTimeString());
 
   } catch (err) {
-    console.error("Error:", err.message);
+    console.error("❌ Error:", err.message);
   }
 }
 
+// ▶️ RUN QUERY
 async function runQuery() {
   const body = {
     query: `
@@ -46,11 +53,14 @@ async function runQuery() {
 
   const res = await fetch(GRAFANA_QUERY_URL, {
     method: "POST",
-    headers,
+    headers: {
+      "Content-Type": "application/json",
+      "Cookie": SESSION
+    },
     body: JSON.stringify(body)
   });
 
-  const data = await res.json();
+  const data = await safeJson(res);
 
   return {
     jobId: data.jobReference.jobId,
@@ -58,21 +68,28 @@ async function runQuery() {
   };
 }
 
+// ▶️ GET RESULTS
 async function getQueryResults(job) {
   const url = `${GRAFANA_QUERY_URL}/${job.jobId}?location=${job.location}`;
 
-  for (let i = 0; i < 5; i++) {
-    const res = await fetch(url, { headers });
-    const json = await res.json();
+  for (let i = 0; i < 10; i++) {
+    const res = await fetch(url, {
+      headers: {
+        "Cookie": SESSION
+      }
+    });
+
+    const json = await safeJson(res);
 
     if (json.jobComplete) return json;
 
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 1500));
   }
 
   throw new Error("Timeout");
 }
 
+// ▶️ PROCESS
 function processResults(result) {
   if (!result.rows) return [];
 
@@ -82,7 +99,8 @@ function processResults(result) {
     const obj = {};
     row.f.forEach((col, i) => obj[fields[i]] = col.v);
 
-    const [project, task, center] = (obj.metric || "N/A | N/A | N/A").split(" | ");
+    const [project, task, center] =
+      (obj.metric || "N/A | N/A | N/A").split(" | ");
 
     return {
       project,
@@ -93,22 +111,28 @@ function processResults(result) {
   });
 }
 
+// ▶️ FIREBASE
 async function updateFirebase(data) {
-  await fetch(FIREBASE_URL, {
+  const res = await fetch(FIREBASE_URL, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       lastUpdated: new Date().toISOString(),
-      data: data
+      data
     })
   });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Firebase error: ${text}`);
+  }
 }
 
-// 🔁 LOOP EVERY 1 SECOND (safe async loop)
+// 🔁 LOOP
 async function startLoop() {
   while (true) {
     await mainLoop();
-    await new Promise(r => setTimeout(r, 1000)); // 1 second delay
+    await new Promise(r => setTimeout(r, 10000)); // 10 sec
   }
 }
 
