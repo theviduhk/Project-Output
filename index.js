@@ -1,6 +1,6 @@
 import fetch from "node-fetch";
 
-const GRAFANA_QUERY_URL = "https://monitor-public.trax-cloud.com/api/datasources/proxy/133/bigquery/v2/projects/trax-ortal-prod/queries/job_-jDE2WU-3DAk3nMKke_oEqDPhF1t?location=US";
+const GRAFANA_QUERY_URL = "https://monitor-public.trax-cloud.com/api/datasources/proxy/133/bigquery/v2/projects/trax-ortal-prod/queries";
 
 const SESSION = "grafana_session=e3cda9b59ef96dac22a4e18f1c960757";
 
