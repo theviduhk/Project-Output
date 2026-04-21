@@ -1,6 +1,6 @@
 import fetch from "node-fetch";
 
-const GRAFANA_QUERY_URL = "https://monitor.trax-cloud.com/api/datasources/proxy/133/bigquery/v2/projects/trax-retail/queries";
+const GRAFANA_QUERY_URL = "https://monitor-public.trax-cloud.com/api/datasources/proxy/133/bigquery/v2/projects/trax-ortal-prod/queries";
 
 const USERNAME = "gss.kurunegala@gssintl.biz";
 const PASSWORD = "Gssk@2021";
