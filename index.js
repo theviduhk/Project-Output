@@ -1,19 +1,23 @@
 import fetch from "node-fetch";
 
-const GRAFANA_QUERY_URL = "https://monitor-public.trax-cloud.com/api/datasources/proxy/133/bigquery/v2/projects/trax-ortal-prod/queries";
+const GRAFANA_QUERY_URL =
+  "https://monitor-public.trax-cloud.com/api/datasources/proxy/133/bigquery/v2/projects/trax-ortal-prod/queries";
 
+// 👉 Only session value (NOT full cookie string)
 const SESSION = "c8eaf4ebc900f42829a1e55664c4fb73";
 
-const FIREBASE_URL = "https://projectgap-4b7d9-default-rtdb.firebaseio.com/project-gap.json";
+const FIREBASE_URL =
+  "https://projectgap-4b7d9-default-rtdb.firebaseio.com/project-gap.json";
 
-// ✅ SAFE JSON
+// ✅ SAFE JSON PARSER
 async function safeJson(res) {
   const text = await res.text();
 
   try {
     return JSON.parse(text);
   } catch {
-    throw new Error(`❌ Non-JSON response:\n${text.substring(0, 200)}`);
+    console.log("❌ RAW RESPONSE:\n", text);
+    throw new Error("Non-JSON response received");
   }
 }
 
@@ -29,7 +33,6 @@ async function mainLoop() {
     await updateFirebase(formatted);
 
     console.log("✅ Updated:", new Date().toLocaleTimeString());
-
   } catch (err) {
     console.error("❌ Error:", err.message);
   }
@@ -48,56 +51,73 @@ async function runQuery() {
       GROUP BY 1
       ORDER BY value DESC
     `,
-    useLegacySql: false
+    useLegacySql: false,
   };
 
   const res = await fetch(GRAFANA_QUERY_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Cookie": SESSION
+      "Accept": "application/json",
+
+      // ✅ FIXED COOKIE FORMAT
+      "Cookie": `grafana_session=${SESSION}`,
+
+      // optional but helps Grafana setups
+      "X-Grafana-Org-Id": "1",
     },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
   });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`HTTP ${res.status} - ${errText}`);
+  }
 
   const data = await safeJson(res);
 
   return {
     jobId: data.jobReference.jobId,
-    location: data.jobReference.location
+    location: data.jobReference.location,
   };
 }
 
-// ▶️ GET RESULTS
+// ▶️ GET RESULTS (polling)
 async function getQueryResults(job) {
   const url = `${GRAFANA_QUERY_URL}/${job.jobId}?location=${job.location}`;
 
   for (let i = 0; i < 10; i++) {
     const res = await fetch(url, {
       headers: {
-        "Cookie": SESSION
-      }
+        "Accept": "application/json",
+        "Cookie": `grafana_session=${SESSION}`,
+      },
     });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Polling failed ${res.status}: ${err}`);
+    }
 
     const json = await safeJson(res);
 
     if (json.jobComplete) return json;
 
-    await new Promise(r => setTimeout(r, 1500));
+    await new Promise((r) => setTimeout(r, 1500));
   }
 
-  throw new Error("Timeout");
+  throw new Error("Timeout waiting for BigQuery job");
 }
 
-// ▶️ PROCESS
+// ▶️ PROCESS RESULTS
 function processResults(result) {
   if (!result.rows) return [];
 
-  const fields = result.schema.fields.map(f => f.name);
+  const fields = result.schema.fields.map((f) => f.name);
 
-  return result.rows.map(row => {
+  return result.rows.map((row) => {
     const obj = {};
-    row.f.forEach((col, i) => obj[fields[i]] = col.v);
+    row.f.forEach((col, i) => (obj[fields[i]] = col.v));
 
     const [project, task, center] =
       (obj.metric || "N/A | N/A | N/A").split(" | ");
@@ -106,20 +126,22 @@ function processResults(result) {
       project,
       task,
       center,
-      value: Number(obj.value || 0)
+      value: Number(obj.value || 0),
     };
   });
 }
 
-// ▶️ FIREBASE
+// ▶️ FIREBASE UPDATE
 async function updateFirebase(data) {
   const res = await fetch(FIREBASE_URL, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({
       lastUpdated: new Date().toISOString(),
-      data
-    })
+      data,
+    }),
   });
 
   if (!res.ok) {
@@ -128,11 +150,13 @@ async function updateFirebase(data) {
   }
 }
 
-// 🔁 LOOP
+// 🔁 LOOP RUNNER
 async function startLoop() {
   while (true) {
     await mainLoop();
-    await new Promise(r => setTimeout(r, 30000)); // 10 sec
+
+    // ⚠️ 30 seconds delay
+    await new Promise((r) => setTimeout(r, 30000));
   }
 }
 
